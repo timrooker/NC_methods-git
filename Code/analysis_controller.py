@@ -4,7 +4,7 @@ Created on Fri Jul 26 15:04:30 2019
 
 @author: mep16tjr
 """
-
+#%%
 import pyodbc
 import pandas as pd
 import matplotlib.pyplot as plt
