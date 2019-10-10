@@ -136,6 +136,8 @@ def correct_682(data, rotary_case, axis):
                 data['position_{}'.format('y')] += offsets['y']
             elif 'C270.' in rotary_case:
                 data['position_{}'.format('y')] -= offsets['x'] 
+        elif axis == 'z':
+            data['position_z'] += offsets['z']
 
     elif 'B90' in rotary_case:
         if axis == 'x':
@@ -149,6 +151,15 @@ def correct_682(data, rotary_case, axis):
                 data['position_{}'.format(axis)] += offsets[axis_1]  
             elif 'C270.' in rotary_case:
                 data['position_{}'.format(axis)] -= offsets[axis_2] 
+        elif axis == 'z':
+            if 'C0.' in rotary_case:
+                data['position_{}'.format('z')] -= offsets['x']          
+            elif 'C90.' in rotary_case:
+                data['position_{}'.format('z')] += offsets['y']  
+            elif 'C180.' in rotary_case:
+                data['position_{}'.format('z')] += offsets['x']  
+            elif 'C270.' in rotary_case:
+                data['position_{}'.format('z')] -= offsets['y'] 
 
     elif 'B-90' in rotary_case:
         if axis == 'x':
@@ -161,7 +172,16 @@ def correct_682(data, rotary_case, axis):
             elif 'C180.' in rotary_case:
                 data['position_{}'.format(axis)] += offsets[axis_1]  
             elif 'C270.' in rotary_case:
-                data['position_{}'.format(axis)] -= offsets[axis_2]                 
+                data['position_{}'.format(axis)] -= offsets[axis_2]  
+        elif axis == 'z':
+            if 'C0.' in rotary_case:
+                data['position_{}'.format('z')] += offsets['x']          
+            elif 'C90.' in rotary_case:
+                data['position_{}'.format('z')] -= offsets['y']  
+            elif 'C180.' in rotary_case:
+                data['position_{}'.format('z')] -= offsets['x']  
+            elif 'C270.' in rotary_case:
+                data['position_{}'.format('z')] += offsets['y']                
     return data
 # =============================================================================
 # Find the XYZ positions which relate to the found local_times
@@ -214,7 +234,9 @@ for function in fpass_LocalTime:
                     data = pd.read_sql(sql, conn)
                     if function == 'G68.2':
                         data = correct_682(data, rotary_case, axis)
-                        
+                    # if function == 'G54.2' and rotary_case == 'B-90. C270.':
+                    #     data = correct_682(data, rotary_case, axis)
+
                     fpass_xyz[function][rotary_case][axis][t] = data
                     
                 except IndexError as e1:
@@ -237,19 +259,23 @@ for function in fpass_LocalTime:
 #%%
 # manually correct the dataframes so they only include the finishing pass
 
-def fpass_window(fpass_xyz, function, rotary_case, lbound, ubound, alt_run=None):
+def fpass_window(fpass_xyz, function, rotary_case, lbound, ubound, window_z=False, alt_run=None):
     # takes arguments to clip a window in the data collection and returns the new selection to i = 1
     i = 1
-
-    if alt_run == None:
-        fpass_xyz[function][rotary_case]['x'][i] = fpass_xyz[function][rotary_case]['x'][i][lbound:ubound] 
-        fpass_xyz[function][rotary_case]['y'][i] = fpass_xyz[function][rotary_case]['y'][i][lbound:ubound] 
-        fpass_xyz[function][rotary_case]['z'][i] = fpass_xyz[function][rotary_case]['z'][i][lbound:ubound] 
+    if window_z == False:
+        if alt_run == None:
+            fpass_xyz[function][rotary_case]['x'][i] = fpass_xyz[function][rotary_case]['x'][i][lbound:ubound] 
+            fpass_xyz[function][rotary_case]['y'][i] = fpass_xyz[function][rotary_case]['y'][i][lbound:ubound] 
+        else:
+            fpass_xyz[function][rotary_case]['x'][i] = fpass_xyz[function][rotary_case]['x'][alt_run][lbound:ubound] 
+            fpass_xyz[function][rotary_case]['y'][i] = fpass_xyz[function][rotary_case]['y'][alt_run][lbound:ubound] 
+    
     else:
-        fpass_xyz[function][rotary_case]['x'][i] = fpass_xyz[function][rotary_case]['x'][alt_run][lbound:ubound] 
-        fpass_xyz[function][rotary_case]['y'][i] = fpass_xyz[function][rotary_case]['y'][alt_run][lbound:ubound] 
-        fpass_xyz[function][rotary_case]['z'][i] = fpass_xyz[function][rotary_case]['z'][alt_run][lbound:ubound]         
-
+        if alt_run == None:
+            fpass_xyz[function][rotary_case]['z'][i] = fpass_xyz[function][rotary_case]['z'][i][lbound:ubound] 
+        else:
+            fpass_xyz[function][rotary_case]['z'][i] = fpass_xyz[function][rotary_case]['z'][alt_run][lbound:ubound] 
+    
     return fpass_xyz
 
 def apply_fpass_window(fpass_xyz):
@@ -262,42 +288,55 @@ def apply_fpass_window(fpass_xyz):
     fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C180.', 0, 35)
     fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C270.', 0, 35)
 
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C0.', 0, 30, alt_run=3)
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C90.', 6, 25)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C0.', 18, 34, alt_run=2)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C90.', 11, 29, alt_run=2)
     fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C180.', 12, 29, alt_run=2)
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C270.', 2, 19)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C270.', 15, 33, alt_run=2)
 
     fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C0.', 14, 33, alt_run=3)
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C90.', 5, 23)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C90.', 11, 30, alt_run=3)
     fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C180.', 15, 31, alt_run=3)
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C270.', 2, 21)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C270.', 2, 19)
+
+    # fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C0.', 0, -1, window_z=True, alt_run=4)
+    # fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C90.', 0, -1, window_z=True, alt_run=4)
+    # fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C180.', 0, -1, window_z=True, alt_run=4)
+    # fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C270.', 0, -1, window_z=True, alt_run=4)
+
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C0.', 0, -1, window_z=True, alt_run=2)
+
 
     function = 'G43'
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C0.', 0, -1)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C0.', 0, -1, alt_run=0)
     fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C90.', 0, 46)
     fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C180.', 0, -1, alt_run=0)
     fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C270.', 0, -1, alt_run=0)    
 
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C0.', 0, 22)
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C90.', 0, 24)
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C180.', 7, 27)
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C270.', 0, 24)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C0.', 19, 35, alt_run=0)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C90.', 12, 29, alt_run=0)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C180.', 14, 32, alt_run=0)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C270.', 14, 31, alt_run=0)
 
     fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C0.', 11, 29)
     fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C90.', 11, 29)
     fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C180.', 13, 31)
     fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C270.', 15, 34)
 
+    # fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C0.', 0, -1, window_z=True, alt_run=2)
+    # fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C90.', 0, -1, window_z=True, alt_run=2)
+    # fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C180.', 0, -1, window_z=True, alt_run=2)
+    # fpass_xyz = fpass_window(fpass_xyz, function, 'B0. C270.', 0, -1, window_z=True, alt_run=2)
+
     function = 'G43.4'
     fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C0.', 20, 39) 
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C90.', 10, 23)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C90.', 11, 24, alt_run=2)
     fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C180.', 14, 27, alt_run=2)
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C270.', 9, 22)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C270.', 14, 28, alt_run=2)
 
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C0.', 14, 27, alt_run=2)
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C90.', 0, 27)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C0.', 13, 27, alt_run=2)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C90.', 13, 27, alt_run=2)
     fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C180.', 14, 26, alt_run=2)
-    fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C270.', 6, 19)
+    fpass_xyz = fpass_window(fpass_xyz, function, 'B-90. C270.', 11, 26, alt_run=2)
 
     function = 'G68.2'
     fpass_xyz = fpass_window(fpass_xyz, function, 'B90. C0.', 22, 38)
@@ -366,25 +405,32 @@ G54 = {'x': 600.204,
         'z': -859.739
         }
 
-error_values = {'G43' : copy.deepcopy(fpass),
-                'G43.4' : copy.deepcopy(fpass),
-                'G54.2' : copy.deepcopy(fpass),
-                'G68.2' : copy.deepcopy(fpass)
+error_values = {'G43' : pd.DataFrame(),
+                'G43.4' : pd.DataFrame(),
+                'G54.2' : pd.DataFrame(),
+                'G68.2' : pd.DataFrame()
                 }
 
 # initialise a dataframe of zeros to hold the error vector magnitudes 
-error_vectors = pd.DataFrame(np.zeros((4,len(fpass))), columns=fpass.keys())
-error_vectors['function'] = ['G43', 'G43.4', 'G54.2', 'G68.2']
-error_vectors = error_vectors.set_index('function')
+# error_euclidian = pd.DataFrame(np.zeros((4,len(fpass))), columns=fpass.keys())
+# error_euclidian['function'] = ['G43', 'G43.4', 'G54.2', 'G68.2']
+# error_euclidian = error_euclidian.set_index('function')
 
 i = 1
 for function in functions:
     for rotary_case in fpass:
-        for axis in ['x', 'y']:
+        case_list = []
+        
+        for axis in ['x', 'y', 'z']:
+            
             if 'B0.' in rotary_case:
                 l_bound = min(fpass_xyz[function][rotary_case][axis][i]['position_{}'.format(axis)])
                 u_bound = max(fpass_xyz[function][rotary_case][axis][i]['position_{}'.format(axis)])
-                error_values[function][rotary_case][axis] = G54[axis] - ((l_bound + u_bound) / 2)
+                # error_values[function][rotary_case][axis] = G54[axis] - ((l_bound + u_bound) / 2)
+                if axis != 'z':
+                    case_list.append(G54[axis] - ((l_bound + u_bound) / 2))
+                else:
+                    case_list.append(min(fpass_xyz[function][rotary_case][axis][i]['position_{}'.format(axis)]))
 
             if 'B90.' in rotary_case:
                 l_bound = min(fpass_xyz[function][rotary_case][axis][i]['position_{}'.format(axis)])
@@ -397,9 +443,15 @@ for function in functions:
                 if axis == 'x':
                     # calculate the nominal centre point between top of step and G54 pivot point. MCS of step is G54 - (program zero
                     # offset in z + B-axis error in z) + 30mm for the already machined steps, this + G54 / 2 gives the centre point.
-                    error_values[function][rotary_case][axis] = ((G54[axis] - (512 + 0.25) + 30) + G54[axis]) / 2 - (l_bound + u_bound) /2
+                    # error_values[function][rotary_case][axis] = ((G54[axis] - (512 + 0.25) + 30) + G54[axis]) / 2 - (l_bound + u_bound) /2
+                    case_list.append(((G54[axis] - (512) + 30) + G54[axis]) / 2 - (l_bound + u_bound) /2)
+
                 elif axis == 'y':
-                    error_values[function][rotary_case][axis] = G54[axis] - ((l_bound + u_bound) / 2)
+                    # error_values[function][rotary_case][axis] = G54[axis] - ((l_bound + u_bound) / 2)
+                    case_list.append(G54[axis] - ((l_bound + u_bound) / 2))
+                
+                elif axis == 'z':
+                    case_list.append(min(fpass_xyz[function][rotary_case][axis][i]['position_{}'.format(axis)]))
 
             if 'B-90.' in rotary_case:
                 u_bound = max(fpass_xyz[function][rotary_case][axis][i]['position_{}'.format(axis)])     
@@ -412,47 +464,93 @@ for function in functions:
                 if axis == 'x':
                     # calculate the nominal centre point between top of step and G54 pivot point. MCS of step is G54 + (program zero
                     # offset in z + B-axis error in z) - 25mm for the already machined steps, this + G54 / 2 gives the centre point.
-                    error_values[function][rotary_case][axis] = ((G54[axis] + (512 + 0.25) - 25) + G54[axis]) / 2 - (l_bound + u_bound) / 2
+                    # error_values[function][rotary_case][axis] = ((G54[axis] + (512 + 0.25) - 25) + G54[axis]) / 2 - (l_bound + u_bound) / 2
+                    case_list.append(((G54[axis] + (512) - 25) + G54[axis]) / 2 - (l_bound + u_bound) / 2)
                 elif axis == 'y':
-                    error_values[function][rotary_case][axis] = G54[axis] - ((l_bound + u_bound) / 2)
+                    # error_values[function][rotary_case][axis] = G54[axis] - ((l_bound + u_bound) / 2)
+                    case_list.append(G54[axis] - ((l_bound + u_bound) / 2))
 
-        try:
-            error_vectors[rotary_case][function] = abs(error_values[function][rotary_case]['x'] ** 2 + error_values[function][rotary_case]['y'] ** 2) ** 0.5
-            print('{} {} magnitude: {}'.format(function, rotary_case, np.around(error_vectors[rotary_case][function], 3)))
-        except TypeError as e1:
-            print('type error: {}'.format(e1))
+                elif axis == 'z':
+                    case_list.append(min(fpass_xyz[function][rotary_case][axis][i]['position_{}'.format(axis)]))
 
-# now process these results as deviations from average
+        error_values[function][rotary_case] = case_list
+
+#%%
+# calculate the average value for each rotary case and log in a df
+error_valuesAverage = pd.DataFrame()
+# create a separate dataframe to hold the deviations from average
+error_valuesDFA = copy.deepcopy(error_values)
+
 for rotary_case in fpass:
-    average = error_vectors[rotary_case].sum() / 4
-    error_vectors[rotary_case] -= average
-    error_vectors[rotary_case] = abs(error_vectors[rotary_case])
+    # omit G54.2 from B-90 C270
+    #if rotary_case != 'B-90. C270.':
+    average = (error_values['G54.2'][rotary_case] + error_values['G43'][rotary_case] + error_values['G43.4'][rotary_case] + error_values['G68.2'][rotary_case]) / 4
+    #else:
+     #   average = (error_values['G43'][rotary_case] + error_values['G43.4'][rotary_case] + error_values['G68.2'][rotary_case]) / 3
+    error_valuesAverage[rotary_case] = average
+
+for function in functions:
+    for rotary_case in fpass:
+        error_valuesDFA[function][rotary_case] = error_values[function][rotary_case] - error_valuesAverage[rotary_case]
+
+for function in functions:
+    error_valuesDFA[function]['axis'] = ['x', 'y', 'z']
+    error_valuesDFA[function] = error_valuesDFA[function].set_index('axis')
+
+print(error_valuesDFA)
+
+
+        # error_euclidian[function][rotary_case] = ( (error_values[function][rotary_case]['x'] - error_valuesAverage[rotary_case][0]) ** 2 + (error_values[function][rotary_case]['y'] - error_valuesAverage[rotary_case][1]) ** 2) ** 0.5
+    # error_vectors[rotary_case] = abs(error_vectors[rotary_case])
+
+
 #%%
 # plot the distances from average and save to file
 
 B0_steps = ['B0. C0.', 'B0. C90.', 'B0. C180.', 'B0. C270.', 'B0. C360.']
-Bp90_steps = ['B90. C180.', 'B90. C90.', 'B90. C180.', 'B90. C270.']
-Bn90_steps = ['B-90. C90.', 'B-90. C90.', 'B-90. C180.', 'B-90. C270.'] 
-markers = ['.-', 'x-', '+-', 'v-']
+Bp90_steps = ['B90. C0.', 'B90. C90.', 'B90. C180.', 'B90. C270.']
+Bn90_steps = ['B-90. C0.', 'B-90. C90.', 'B-90. C180.', 'B-90. C270.'] 
+markers = ['.--', 'x--', '+--', 'v--']
+alpha = 0.7
 
 def plot_distances():
     plt.close('all')
-    fig = plt.figure(figsize=(10,10))
+    fig = plt.figure(figsize=(15,10))
     ax_title = fig.add_subplot(111, frameon = False)
     ax_title.tick_params(labelcolor='none', top='off', bottom='off', left='off', right='off')
     ax_title.grid(False)
     ax_title.axis('off')
 
-    ax1 = fig.add_subplot(311)
-    ax2 = fig.add_subplot(312)
-    ax3 = fig.add_subplot(313)
-    error_vectors[B0_steps].T.plot(style=markers, ax=ax1, legend=True)
-    error_vectors[Bp90_steps].T.plot(style=markers, ax=ax2, legend=False)
-    error_vectors[Bn90_steps].T.plot(style=markers, ax=ax3, legend=False)
+    axs = {}
+    axs[1] = fig.add_subplot(331)
+    axs[2] = fig.add_subplot(332)
+    axs[3] = fig.add_subplot(333)    
+    axs[4] = fig.add_subplot(334)
+    axs[5] = fig.add_subplot(335)
+    axs[6] = fig.add_subplot(336)
+    axs[7] = fig.add_subplot(337)
+    axs[8] = fig.add_subplot(338)
+    axs[9] = fig.add_subplot(339)
 
-    ax1.legend(loc='upper left', bbox_to_anchor=(1,1))
+    i = 1
+    for axis in xyz_init:
+        legend_status = False
+        for function, marker in zip(functions, markers):
+            if axis == 'z':
+                legend_status = True
+            error_valuesDFA[function][B0_steps].loc[axis].T.plot(style=marker, ax=axs[i], label = function, legend=legend_status, alpha=alpha)
+            error_valuesDFA[function][Bp90_steps].loc[axis].T.plot(style=marker, ax=axs[i+3], label = function, legend=False, alpha=alpha)
+            # remove the last G54.2 point as the data is garbage
+            #if function != 'G54.2':
+            error_valuesDFA[function][Bn90_steps].loc[axis].T.plot(style=marker, ax=axs[i+6], label = function, legend=False, alpha=alpha)
+            #else:
+              #  error_valuesDFA[function][Bn90_steps[:-1]].loc[axis].T.plot(style=marker, ax=axs[i+6], label = function, legend=False, alpha=alpha)
+        axs[i].set_title('Commanded position from average in {}'.format(axis))
+        i += 1
 
-    ax_title.set_title('Euclidian distance from average feature centre point by method')
+    axs[3].legend(loc='upper left', bbox_to_anchor=(1,1))
+
+   # ax_title.set_title('Euclidian distance from average feature centre point by method')
     fig.show()
     fig.savefig('NC_methods-git/Results/Controller/average_step_deviations.tiff', format='tiff', facecolor='white')
 

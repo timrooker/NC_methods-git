@@ -4,29 +4,48 @@ from xml.etree import ElementTree as ET
 import pandas as pd
 import sys
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import copy
+plt.style.use('ggplot')
+%matplotlib qt
+matplotlib.rcParams['text.color'] = 'black'
+
 
 #%%
 # initialise
+positions = {620: ['B0 C0', 'B0 C45', 'B0 C90', 'B0 C135', 'B0 C180', 'B0 C225', 'B0 C270', 'B0 C315', 'B0 C360'],
+            621: ['B-90 C0', 'B-90 C45', 'B-90 C90', 'B-90 C135', 'B-90 C180', 'B-90 C225', 'B-90 C270', 'B-90 C315', 'B-90 C360'],
+            622: ['B90 C0', 'B90 C45', 'B90 C90', 'B90 C135', 'B90 C180', 'B90 C225', 'B90 C270', 'B90 C315', 'B90 C360'],
+            623: ['B0 C0', 'B15 C0', 'B30 C0', 'B45 C0', 'B60 C0', 'B75 C0', 'B90 C0'],
+            624: ['B0 C0', 'B-15 C0', 'B-30 C0', 'B-45 C0', 'B-60 C0', 'B-75 C0', 'B-90 C0']
+            }
+
 program_dict = {620: pd.DataFrame(), 
                 621: pd.DataFrame(), 
                 622: pd.DataFrame(), 
                 623: pd.DataFrame(), 
                 624: pd.DataFrame()
                 }
-data_pp = {'G43' : program_dict, 
-            'G43_4' : program_dict, 
-            'G54_2' : program_dict, 
-            'G68_2' : program_dict
+
+data_pp = {'G43' : copy.deepcopy(program_dict), 
+            'G43_4' : copy.deepcopy(program_dict), 
+            'G43_4-postop' : copy.deepcopy(program_dict), 
+            'G54_2' : copy.deepcopy(program_dict), 
+            'G68_2' : copy.deepcopy(program_dict)
             }
 file_path = r'Data/NC_PP-results'
 
 #%%
+# pull data from benchmarks (pre-machining)
 
-cases = ['G43', 'G43_4', 'G54_2', 'G68_2']
-programs = ['620', '621', '622', '623', '624']
+cases = ['G43', 'G43_4', 'G43_4-postop', 'G54_2', 'G68_2']
+programs = [620, 621, 622, 623, 624]
 
 def pull_data(case, program):
-    file_extract = r'{}/{}/{}.xml'.format(file_path, case, program)
+    if case == 'G43_4-postop':
+        case = 'G43_4/post_machining'
+    file_extract = r'{}/{}/{}.xml'.format(file_path, case, str(program))
     tree = ET.parse(file_extract)
     root = tree.getroot()
 
@@ -49,130 +68,60 @@ def pull_data(case, program):
 
 for case in cases:
     for program in programs:
-        data_pp[case][program] = pull_data(case, program)
+        data_pp[case][program] = copy.deepcopy(pull_data(case, program))
 
 #%%
+# compare 2D error plots
 
-data_pp['G54_2']['622']
+plt.close('all')
 
+alpha = 0.4
+
+arc_rotation = 623
+x_axis = 'x'
+y_axis = 'z'
+plt.plot(data_pp['G43_4'][arc_rotation]['x'], data_pp['G43_4'][arc_rotation]['z'], c = 'g', marker='o', label = 'G43.4', alpha = alpha)
+plt.plot(data_pp['G43'][arc_rotation]['x'], data_pp['G43'][arc_rotation]['z'], marker='x', c = 'b', label = 'G43', alpha = alpha)
+plt.plot(data_pp['G54_2'][arc_rotation][x_axis], data_pp['G54_2'][arc_rotation][y_axis], c = 'r', marker='*', label = 'G54.2', alpha = alpha)
+plt.plot(data_pp['G68_2'][arc_rotation][x_axis], data_pp['G68_2'][arc_rotation][y_axis], c = 'c', marker='_', label = 'G68.2', alpha = alpha)
+plt.legend()
+plt.show()
 
 #%%
-for i in range(int(rows)):
-    i = i + 1
-    for child in root.findall("./Parameter/[Key='Row{}Value2']".format(i)):
-        d.append(float(child.find('Value').text))
-#%% PROBED POSITIONS TRANSFER DEFINITION
-def xyz_transfer(file):
-    global transfer_xyz, transfer_abc
-    file_extract = file_path + file + '/Statistics.xml'
-    root = ET.parse(file_extract)
-    
-    #Scan the Information Data node and return the test's timestamp
-    timestamp = file
-    date = '{}-{}-{}'.format(timestamp[:4], timestamp[4:6], timestamp[6:8])
-    time = '{}:{}:{}'.format(timestamp[8:10], timestamp[10:12], timestamp[12:14])
-    
-    print('File selected: {} {}'.format(date, time))
-    
-    p_l = pd.DataFrame()                                                        #define DF to store complex report links
-    
-    x = 0
-    for i in root.findall("mspStatsDataElement"):
-        element= [i.find(n).text for n in (
-                "title",
-                "link", 
-                )]
-        p_l[x] = element
-        x = x + 1 
-    
-    db_tables = ('xyz_ps0',               #0
-                 'xyz_ps90',              #1 
-                 'xyz_rs_plus_p0',        #2
-                 'xyz_rs_neg_p0',         #3
-                 'xyz_rs_plus_p90',       #4
-                 'xyz_rs_neg_p90',        #5
-                 )
-    abc_tables = ('abc_ps0',               #0
-                 'abc_ps90',              #1 
-                 'abc_rs_plus_p0',        #2
-                 'abc_rs_neg_p0',         #3\
-                 'abc_rs_plus_p90',       #4
-                 'abc_rs_neg_p90',        #5
-                 )
-    
-    for t in range(2):
-        if t == 0:
-            table = abc_tables
-        elif t == 1:
-            table = db_tables
-        p_links = p_l                                                           #reset xml link object to iterate
-        for i in range(len(p_l.columns)):
-            if p_links[i][0] == 'Rotary Single Primary':
-                p_links = p_links.rename(columns={i:table[0]})   
-            elif p_links[i][0] == 'Rotary Dual Primary':
-                p_links = p_links.rename(columns={i:table[1]})
-                                                        
-            elif p_links[i][0] == 'Rotary Single Secondary (+)':
-                p_links = p_links.rename(columns={i:table[2]})   
-            elif p_links[i][0] == 'Rotary Single Secondary (-)':
-                p_links = p_links.rename(columns={i:table[3]})  
-                        
-            elif p_links[i][0] == 'Rotary Dual Secondary (+)':
-                p_links = p_links.rename(columns={i:table[4]})        
-            elif p_links[i][0] == 'Rotary Dual Secondary (-)':
-                p_links = p_links.rename(columns={i:table[5]})   
-            else:
-                p_links = p_links.drop(columns={i})  
-        
-        table = p_links.columns
-        if t == 0:
-            abc_tables = table
-        elif t == 1:
-            db_tables = table
-      
-    p_xyz = pd.DataFrame(columns=db_tables)
-    p_abc = pd.DataFrame(columns=abc_tables)
-    p_positions = pd.DataFrame(columns=db_tables)
-    
-    for x, y in zip(db_tables, abc_tables):
-        file_extract_complex = r'C:/Users/mep16tjr/Desktop/Data/' + db_name + p_links[x][1][5:] 
-        file_extract_xml = file_extract_complex[:-5] + '.xml'
-        file_extract_txt = file_extract_complex[:-5] + '.msr'        
-        tree = ET.parse(file_extract_xml)
-        
-        root = tree.getroot()
-        root_xyz = root[2]                                                              #select measured XYZ position node, CustomReport2
-        
-        rows = root_xyz[-1].find('Key').text[3:-8]
-        n_positions = []
-        n_positions.append(int(float(rows)/3))
-    
-        d_xyz = [timestamp]
-        for i in range(int(rows)):
-            i = i + 1
-            for child in root_xyz.findall("./Parameter/[Key='Row{}Value2']".format(i)):
-                d_xyz.append(float(child.find('Value').text))
-                
-        if len(d_xyz) < 40:
-            Nans = 40 - len(d_xyz)
-            for i in range(Nans):
-                d_xyz.append('NULL')
-        p_xyz[x] = d_xyz
-        p_positions[x] = n_positions
-       
-        d_abc = [timestamp]
-        
-        searchfile = open(file_extract_txt,'r')
-        for line in searchfile:
-            if 'G801 N1' in line: 
-                for i in range(3):
-                    i = i+6
-                    d_abc.append(line.split()[i][1:])
-        #            
-        if len(d_abc) < 40:
-            Nans = 40 - len(d_abc)
-            for i in range(Nans):
-                d_abc.append('NULL')
-        p_abc[y] = d_abc
-        
-    p_cols = p_xyz.columns
+# compare absolute vector magnitudes
+
+plt.close('all')
+
+
+# alpha = 1
+markers = ['.', 'x', '+', 'v']
+axs = []
+fig = plt.figure(figsize=(10,10))
+
+for x in range(len(programs)):
+    axs.append(fig.add_subplot(5,1,x+1))
+
+ax_title = fig.add_subplot(111, frameon = False)
+ax_title.tick_params(labelcolor='none', top='off', bottom='off', left='off', right='off')
+ax_title.grid(False)
+
+for program in programs:
+    for function, marker in zip(['G43', 'G43_4', 'G54_2', 'G68_2'], markers):
+        magnitude = abs(( (data_pp[function][program]['x'] ** 2) + (data_pp[function][program]['y'] ** 2) + (data_pp[function][program]['y'] ** 2) ) ** 0.5)
+        if function == 'G68_2' and program == 623:
+            axs[programs.index(program)].plot(positions[program][1:], magnitude, marker = marker, label = function)
+        else:
+            axs[programs.index(program)].plot(positions[program], magnitude, marker = marker, label = function)
+
+        # axs[programs.index(program)].set_title(program)
+
+ax_title.set_xlabel('Probed position')
+ax_title.set_ylabel('Absolute error vector magnitude /mm')
+ax_title.set_title('Error vector magnitudes across various rotary axis positions')
+# plt.tight_layout()
+axs[0].legend(loc='upper left', bbox_to_anor=(1,1))
+fig.show()
+fig.savefig(r'C:\Users\mep16tjr\Desktop\Python\02 NC Methods\NC_methods-git\Results\NCPP_errorVectors.tiff', facecolor='white', format='tiff')
+fig.savefig(r'C:\Users\mep16tjr\Desktop\Python\02 NC Methods\NC_methods-git\Results\NCPP_errorVectors.jpeg', facecolor='white', format='jpeg')
+
+#%%
