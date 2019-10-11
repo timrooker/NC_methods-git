@@ -10,7 +10,9 @@ import copy
 plt.style.use('ggplot')
 %matplotlib qt
 matplotlib.rcParams['text.color'] = 'black'
-
+os.chdir(r'C:\Users\mep16tjr\Desktop\Python\02 NC Methods\NC_methods-git\Code')
+from error_model_nmv8000 import HTM
+os.chdir(r'C:\Users\mep16tjr\Desktop\Python\02 NC Methods')
 
 #%%
 # initialise
@@ -34,6 +36,8 @@ data_pp = {'G43' : copy.deepcopy(program_dict),
             'G54_2' : copy.deepcopy(program_dict), 
             'G68_2' : copy.deepcopy(program_dict)
             }
+
+data_pp_measured = copy.deepcopy(data_pp)
 file_path = r'Data/NC_PP-results'
 
 #%%
@@ -53,75 +57,153 @@ def pull_data(case, program):
     rows = root_xyz[-1].find('Key').text[3:-8]
 
     d = []
+    d_measured = []
     n_positions = int(float(rows)/3)
     for i in range(int(rows)):
         i = i + 1
         for child in root_xyz.findall("./Parameter/[Key='Row{}Value5']".format(i)):
             d.append(float(child.find('Value').text))
 
+    for i in range(int(rows)):
+        i = i + 1
+        for child in root_xyz.findall("./Parameter/[Key='Row{}Value2']".format(i)):
+            d_measured.append(float(child.find('Value').text))
+
     d_xyz = []
+    d_measured_xyz = []
     for n in range(n_positions):
         d_xyz.append((d[n*3], d[1 + n*3], d[2 + n*3])) 
+        d_measured_xyz.append((d_measured[n*3], d_measured[1 + n*3], d_measured[2 + n*3])) 
     p = pd.DataFrame(d_xyz, columns=list('xyz'))
+    p_measured = pd.DataFrame(d_measured_xyz, columns=list('xyz'))
 
-    return p
+    return p, p_measured
 
 for case in cases:
     for program in programs:
-        data_pp[case][program] = copy.deepcopy(pull_data(case, program))
+        data_pp[case][program], data_pp_measured[case][program] = copy.deepcopy(pull_data(case, program))
+
+# missing data point for G68.2 in program 623 (B90 C0), replace with value from B-90 C0 at same position
+data_0 = []
+data_0.insert(0, data_pp_measured['G68_2'][624].iloc[0])
+data_pp_measured['G68_2'][623] = pd.concat( [ pd.DataFrame(data_0), data_pp_measured['G68_2'][623] ], ignore_index=True)
+data_pp['G68_2'][623] = data_pp_measured['G68_2'][623] - data_pp_measured['G68_2'][623].mean()
 
 #%%
 # compare 2D error plots
 
-plt.close('all')
+def align_data(data, arc_rotation):
+    # executes a rotation on G54.2 and G68.2 to align all methods in XYZ orientation
+    if arc_rotation == 620:
+        B = 0
+        C = 180
+    elif arc_rotation == 621:
+        B = -90
+        C = 180
+    elif arc_rotation == 622:
+        B = 90
+        C = 180
+    elif arc_rotation == 623:
+        B = 90
+        C = 0
+    elif arc_rotation == 624:
+        B = -90
+        C = 0
 
-alpha = 0.4
+    data_aligned = pd.DataFrame()
+    for j in range(len(data['x'])):
+        entry = pd.DataFrame(HTM(data['x'][j], data['y'][j], data['z'][j], B, C, [0,0,0])[:-1].T, columns = list('xyz'))
+        data_aligned = data_aligned.append(entry)
+    return data_aligned
 
-arc_rotation = 623
-x_axis = 'x'
-y_axis = 'z'
-plt.plot(data_pp['G43_4'][arc_rotation]['x'], data_pp['G43_4'][arc_rotation]['z'], c = 'g', marker='o', label = 'G43.4', alpha = alpha)
-plt.plot(data_pp['G43'][arc_rotation]['x'], data_pp['G43'][arc_rotation]['z'], marker='x', c = 'b', label = 'G43', alpha = alpha)
-plt.plot(data_pp['G54_2'][arc_rotation][x_axis], data_pp['G54_2'][arc_rotation][y_axis], c = 'r', marker='*', label = 'G54.2', alpha = alpha)
-plt.plot(data_pp['G68_2'][arc_rotation][x_axis], data_pp['G68_2'][arc_rotation][y_axis], c = 'c', marker='_', label = 'G68.2', alpha = alpha)
-plt.legend()
-plt.show()
+def plot_xyzPP(arc_rotation, savefig = False):
+    # plot the results in XYZ
+
+    plt.close('all')
+    fig = plt.figure(figsize=(22,7))
+    ax_title = fig.add_subplot(111, frameon = False)
+    ax_title.tick_params(labelcolor='none', top='off', bottom='off', left='off', right='off')
+    ax_title.grid(False)
+    
+    alpha = 1
+    functions = ['G43', 'G43_4', 'G54_2', 'G68_2']
+    planes = ['xy', 'xz', 'yz']
+    ax = {}
+
+    for i in range(3):
+        ax[i] = fig.add_subplot(1,3,i+1)
+
+    for i, plane in enumerate(planes):
+        lim = [0,0]
+        for function in functions:
+            data = data_pp[function][arc_rotation]
+            if any(x == function for x in (['G54_2', 'G68_2'])):
+                data = align_data(data, arc_rotation)                
+
+            ax[i].plot(data[plane[0]], data[plane[1]], marker='o', label = function, alpha = alpha)
+            ax[i].set_xlabel(plane[0])
+            ax[i].set_ylabel(plane[1])
+
+            l_lim = data.min().min()
+            h_lim = data.max().max()
+            if l_lim < lim[0] or h_lim > lim[1]:
+                lim = [l_lim, h_lim]
+        
+        ax[i].set_xlim([lim[0] - 0.05, lim[1] + 0.05])
+        ax[i].set_ylim([lim[0] - 0.05, lim[1] + 0.05])    
+
+    ax[2].legend(loc='upper left', bbox_to_anchor=(1,1))
+    ax_title.set_title('XYZ plots for rotary case: {} to {}'.format(positions[arc_rotation][0], positions[arc_rotation][-1]))
+    fig.show()
+    if savefig == True:
+        fig.savefig(r'NC_methods-git\Results\Probing\NCPP_errorXYZ_{}.tiff'.format(arc_rotation), format='tiff', facecolor='white')
+
+for x in list(positions.keys()):
+    plot_xyzPP(x, savefig=True)
+
+#%%
+plot_xyzPP(620)
 
 #%%
 # compare absolute vector magnitudes
 
-plt.close('all')
+def plot_trendPP(dataset, savefig=False):
+    plt.close('all')
+    print('plotting {}...'.format(dataset))
+    # alpha = 1
+    markers = ['.', 'x', '+', 'v']
+    axs = []
+    fig = plt.figure(figsize=(10,10))
 
+    for x in range(len(programs)):
+        axs.append(fig.add_subplot(5,1,x+1))
 
-# alpha = 1
-markers = ['.', 'x', '+', 'v']
-axs = []
-fig = plt.figure(figsize=(10,10))
+    ax_title = fig.add_subplot(111, frameon = False)
+    ax_title.tick_params(labelcolor='none', top='off', bottom='off', left='off', right='off')
+    ax_title.grid(False)
 
-for x in range(len(programs)):
-    axs.append(fig.add_subplot(5,1,x+1))
+    for program in programs:    
+        for function, marker in zip(['G43', 'G43_4', 'G54_2', 'G68_2'], markers):
+            data = dataset[function][program]
+            if any(x == function for x in (['G54_2', 'G68_2'])):
+                data = align_data(data, arc_rotation) 
+                # data = data.reset_index()
 
-ax_title = fig.add_subplot(111, frameon = False)
-ax_title.tick_params(labelcolor='none', top='off', bottom='off', left='off', right='off')
-ax_title.grid(False)
-
-for program in programs:
-    for function, marker in zip(['G43', 'G43_4', 'G54_2', 'G68_2'], markers):
-        magnitude = abs(( (data_pp[function][program]['x'] ** 2) + (data_pp[function][program]['y'] ** 2) + (data_pp[function][program]['y'] ** 2) ) ** 0.5)
-        if function == 'G68_2' and program == 623:
-            axs[programs.index(program)].plot(positions[program][1:], magnitude, marker = marker, label = function)
-        else:
+            magnitude = abs(( (data['x'] ** 2) + (data['y'] ** 2) + (data['z'] ** 2) ) ** 0.5)
             axs[programs.index(program)].plot(positions[program], magnitude, marker = marker, label = function)
 
-        # axs[programs.index(program)].set_title(program)
+            # axs[programs.index(program)].set_title(program)
 
-ax_title.set_xlabel('Probed position')
-ax_title.set_ylabel('Absolute error vector magnitude /mm')
-ax_title.set_title('Error vector magnitudes across various rotary axis positions')
-# plt.tight_layout()
-axs[0].legend(loc='upper left', bbox_to_anor=(1,1))
-fig.show()
-fig.savefig(r'C:\Users\mep16tjr\Desktop\Python\02 NC Methods\NC_methods-git\Results\NCPP_errorVectors.tiff', facecolor='white', format='tiff')
-fig.savefig(r'C:\Users\mep16tjr\Desktop\Python\02 NC Methods\NC_methods-git\Results\NCPP_errorVectors.jpeg', facecolor='white', format='jpeg')
+    ax_title.set_xlabel('Probed position')
+    ax_title.set_ylabel('Absolute error vector magnitude /mm')
+    ax_title.set_title('Error vector magnitudes across various rotary axis positions')
+    # plt.tight_layout()
+    axs[0].legend(loc='upper left', bbox_to_anchor=(1,1))
+    fig.show()
+    if savefig == True:
+        fig.savefig(r'C:\Users\mep16tjr\Desktop\Python\02 NC Methods\NC_methods-git\Results\Probing\NCPP_errorVectors.tiff', facecolor='white', format='tiff')
+
+plot_trendPP(data_pp)
 
 #%%
+
